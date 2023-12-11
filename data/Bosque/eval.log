@@ -1,0 +1,44 @@
+Running the following version of UD tools:
+commit e9726a6a7d6913193d90edb45a4cb549235c5b16
+Author: Dan Zeman <zeman@ufal.mff.cuni.cz>
+Date:   Sat Nov 4 17:10:55 2023 +0100
+Evaluating the following revision of UD_Portuguese-Bosque:
+commit 2a6bd8777e8d58ad44ce032c4593c891a2f131b5
+Merge: e916e156c 4f136acb0
+Author: Dan Zeman <zeman@ufal.mff.cuni.cz>
+Size: counted 227827 of 227827 words (nodes).
+Size: min(0, log((N/1000)**2)) = 10.857173138023.
+Size: maximum value 13.815511 is for 1000000 words or more.
+Split: Found more than 10000 training words.
+Split: Found at least 10000 development words.
+Split: Found at least 10000 test words.
+Lemmas: source of annotation (from README) factor is 0.9.
+Universal POS tags: 17 out of 17 found in the corpus.
+Universal POS tags: source of annotation (from README) factor is 0.9.
+Features: 146585 out of 227827 total words have one or more features.
+Features: source of annotation (from README) factor is 0.9.
+Universal relations: 35 out of 37 found in the corpus.
+Universal relations: source of annotation (from README) factor is 0.9.
+Udapi:
+               TOTAL        285
+Udapi: found 285 bugs.
+Udapi: worst expected case (threshold) is one bug per 10 words. There are 227827 words.
+Genres: found 1 out of 17 known.
+/net/work/people/zeman/unidep/tools/validate.py --lang pt --max-err=10 UD_Portuguese-Bosque/pt_bosque-ud-dev.conllu
+*** PASSED ***
+/net/work/people/zeman/unidep/tools/validate.py --lang pt --max-err=10 UD_Portuguese-Bosque/pt_bosque-ud-test.conllu
+*** PASSED ***
+/net/work/people/zeman/unidep/tools/validate.py --lang pt --max-err=10 UD_Portuguese-Bosque/pt_bosque-ud-train.conllu
+*** PASSED ***
+Validity: 1
+(weight=0.0769230769230769) * (score{features}=0.9) = 0.0692307692307692
+(weight=0.0769230769230769) * (score{genres}=0.0588235294117647) = 0.00452488687782805
+(weight=0.0769230769230769) * (score{lemmas}=0.9) = 0.0692307692307692
+(weight=0.256410256410256) * (score{size}=0.785868397151933) = 0.201504717218444
+(weight=0.0512820512820513) * (score{split}=1) = 0.0512820512820513
+(weight=0.0769230769230769) * (score{tags}=0.9) = 0.0692307692307692
+(weight=0.307692307692308) * (score{udapi}=0.987490508148727) = 0.303843233276531
+(weight=0.0769230769230769) * (score{udeprels}=0.851351351351351) = 0.0654885654885655
+(TOTAL score=0.834335761835728) * (availability=1) * (validity=1) = 0.834335761835728
+STARS = 4
+UD_Portuguese-Bosque	0.834335761835728	4
