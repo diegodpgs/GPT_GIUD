@@ -71,12 +71,14 @@ class UDModel:
       for line in open(data_CONLLU).read().split('\n'):
 
           if self.end_sentence__(line):
-            conllu_parsed.append((self.getSentenceDepRelations(sentence),sentence))
+            conllu_parsed.append((self.getSentenceDepRelations(sentence),self.get_sentence_form(sentence)))
             sentence = []
             es += 1
 
           elif self.is_validconst__(line):
             sentence.append(self.parseLine(line))
 
-      results = {'depRel':[lp[0] for lp in conllu_parsed[1:-1]],'sentence':[self.get_sentence_form(lp[1]) for lp in conllu_parsed[1:-1]]}
-      print('%s\n%d Sentences\n%d dependency relations' % (data_CONLLU,len(results['sentence']),sum([len(i) for i in results['depRel']])))
+      
+
+      print('%s\n%d Sentences\n%d dependency relations' % (data_CONLLU,len(conllu_parsed[1:-1]),sum([len(i[0]) for i in conllu_parsed[1:-1]])))
+      return conllu_parsed[1:-1]
