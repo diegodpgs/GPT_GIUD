@@ -81,4 +81,4 @@ class UDModel:
       
 
       print('%s\n%d Sentences\n%d dependency relations' % (data_CONLLU,len(conllu_parsed[1:-1]),sum([len(i[0]) for i in conllu_parsed[1:-1]])))
-      return conllu_parsed[1:-1]
+      return conllu_parsed[0:-1]

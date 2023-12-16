@@ -5,16 +5,16 @@ from udmodel import *
 
 
 def compare(sentence_relation,sentence_length=10):
-
+	print('----- Summarized results on sentence length <= %d-------' % sentence_length)
 	results = [{'DDA':{},'UDA':{}} for i in range(sentence_length+2)]
 
 
 	for r in sentence_relation:
 
-		dep = ['<@>'.join(rd.split('<@>')[0:-1]) for rd in r[0].split("<#>")]
+		dep = ['<@>'.join(rd.lower().split('<@>')[0:-1]) for rd in r[0].split("<#>")]
 		if len(dep) > sentence_length:
 			continue
-		map_DPREL = dict([(dep[index],rd.split('<@>')[-1]) for index,rd in enumerate(r[0].split("<#>"))])
+		map_DPREL = dict([(dep[index].lower(),rd.lower().split('<@>')[-1]) for index,rd in enumerate(r[0].split("<#>"))])
 		number_of_relations = len(dep)
 		
 		if len(r[1]) < 4:
@@ -32,10 +32,10 @@ def compare(sentence_relation,sentence_length=10):
 
 		
 
-		for llm_r in r[1].split("<#>"):
+		for llm_r in r[1].lower().split("<#>"):
 			dh = llm_r
 			
-			hd = '%s<@>%s' % (llm_r.split('<@>')[1],llm_r.split('<@>')[0])
+			hd = '%s<@>%s' % (llm_r.lower().split('<@>')[1],llm_r.lower().split('<@>')[0])
 
 			if dh in dep:
 				dep.remove(dh)
@@ -51,7 +51,10 @@ def compare(sentence_relation,sentence_length=10):
 	matchs_UDA = 0
 	matchs_DDA_deprel = {}
 	matchs_UDA_deprel = {}
-
+	
+	if [i['DDA']=={} for i in results].count(True) == len(results):
+		print('Every sentence has length > than %d' % sentence_length)
+		return 
 	for index,r in enumerate(results):
 		if r['DDA'] == {}:
 			continue
@@ -74,12 +77,7 @@ def compare(sentence_relation,sentence_length=10):
 			matchs_UDA_deprel[dprel][0] += values[0]
 			matchs_UDA_deprel[dprel][1] += values[1]
 
-	# 	if r['DDA'][1] > 0 and index < sentence_length:
-	# 		total_R += r['UDA'][1]
-	# 		DDA += r['DDA'][0]
-	# 		UDA += r['UDA'][0]
 
-	# 		print('(%d) UDA:%.3f DDA:%.3f [%d]' % (index,UDA/total_R,DDA/total_R,r['UDA'][1]/index))
 	print('UDA:%.4f DDA:%.4f [%d]' % (matchs_UDA/total_R,matchs_DDA/total_R,total_R))
 	
 	print('---UDA----')
@@ -98,25 +96,27 @@ def compare(sentence_relation,sentence_length=10):
 
 
 
+def run():
+
+	parser = argparse.ArgumentParser(description='Results')
+	parser.add_argument('--PATHfile',type=str,help="file path of results")
+	parser.add_argument('--sentLength',type=int,help="max length sentence")
+
+	args = parser.parse_args()
 
 
-parser = argparse.ArgumentParser(description='Results')
-parser.add_argument('--PATHfile',type=str,help="file path of results")
-parser.add_argument('--sentLength',type=int,help="max length sentence")
+	relations = []
 
-args = parser.parse_args()
+	for message in open(args.PATHfile).read().split('>--<')[0:-1]:
+
+		if len(message.split('\n')) == 4:
+			
+			chat = message.split('\n')[1].split('|:|')[1]
+			dep  = message.split('\n')[2].split('|:|')[1]
+			
+			relations.append((dep,chat))
+
+	compare(relations,args.sentLength)
 
 
-relations = []
-
-for message in open(args.PATHfile).read().split('>--<')[0:-1]:
-
-	if len(message.split('\n')) == 4:
-		
-		chat = message.split('\n')[1].split('|:|')[1]
-		dep  = message.split('\n')[2].split('|:|')[1]
-		
-		relations.append((dep,chat))
-
-compare(relations,args.sentLength)
 

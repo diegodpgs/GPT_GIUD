@@ -3,6 +3,8 @@ import argparse
 import os
 from openai import OpenAI
 import time
+import random
+from compute_results import *
 
 class llm_UD:
 
@@ -13,8 +15,28 @@ class llm_UD:
         self.matchs_DDA = {}
         self.matchs_UDA = {}
         self.syntatic_relations_testset = {}
+        self.guide = []
+        self.parseGuide()
+
+    def parseGuide(self):
+      for conllu_parsed in self.train:
+
+        pairs = ['(%s -> %s)'% (const['DEP'].lower(),const['HEAD'].lower()) for const in conllu_parsed[0]]
+        sentence = conllu_parsed[1]
+        
+        self.guide.append((pairs,sentence))
 
 
+    def generateGuide(self,shot=None):
+        if shot != None:
+          pairs,sentence = self.guide[shot-1]
+
+        pairs,sentence = self.guide[random.randint(0,len(self.guide)-1)]
+        message = 'Na sentença "%s",  as relações de dependência sintática são mostradas abaixo no formato (token dependente -> token cabeça),\n' % sentence
+
+        message += '\n'.join(pairs)
+        
+        return message
 
     def process_chatgpt_message(self,message,model_chat='gpt-3.5-turbo'):
         messages = []
@@ -28,19 +50,90 @@ class llm_UD:
 
         reply = chat.choices[0].message.content
 
+        if 'Obs: ' in reply:
+          reply = reply.split('Obs: ')[0]
+
+
+        if 'Note que ' in reply:
+          reply = reply.split('Note que ')[0]
+
         return reply
 
-    def getDepRelationsChat(self,message):
-        relations_text = message.replace('"','').split('\n')[2:]
+    def normalizeOutput(self,message,left=False):
+
+        if len(message.split()) > 1:
+          if left:
+            return message.split()[-1]
+          else:
+            return message.split()[0]
+
+        return message
+
+    def __refine__(self,word,left,writerOUT):
+      if len(word) <= 1:
+        return word
+
+      word = word.strip()
+
+      writerOUT.write('REFINE [%s]\n' % word)
+      if left:
+        if word[0] == '-' and len(word.split()) > 2:
+          word = word.split()[1].strip()
+
+        writerOUT.write('REFINE [%s]\n' % word)
+        if len(word.split()) > 1:
+          if word.split()[0][0].isdigit():
+            word = word.split()[1]
+          else:
+            word = word.split()[-1]
+
+        writerOUT.write('REFINE [%s]\n' % word)
+
+      if not left:
+        writerOUT.write('REFINE [%s]\n' % word)
+        if len(word.split()) > 1:
+          word = word.split()[0]
+
+
+      writerOUT.write('REFINE [%s]\n' % word)
+      if len(word)> 1 and word[0] in ['(',')',']','[']:
+        word = word[1:]
+
+      writerOUT.write('REFINE [%s]\n' % word)
+      if len(word)> 1 and word[-1] in ['(',')',']','[']:
+        word = word[0:-1]
+
+      writerOUT.write('REFINE [%s]\n' % word)
+      writerOUT.write('-----------END REFINE---------\n')
+      return word
+
+
+
+
+    def getDepRelationsChat(self,message,writerOUT):
+        if len(message) < 2:
+          return []
+        relations_text = message.replace('"','').split('\n')[1:]
         dep_relations = []
 
 
         for line in relations_text:
-          dep  = line.split('<')[1].split(',')[0].strip()
-          head = line.split('<')[1].split(',')[1].split('>')[0].strip()
+          if '"' in line:
+            line = line.replace('"','')
+          line = line.replace('"','').replace('-->','->').replace('<--','<-')
+          left = ''
+          right = ''
+          if '->' in line:
+            left,right = line.split('->')[0],line.split('->')[1]
+            
+          elif len(line.split()) == 2:
+            left,right = line.split()[0],line.split()[1]
+
+          dep, head = self.__refine__(left,True,writerOUT).strip(),self.__refine__(right,False,writerOUT).strip()
           dep_relations.append((dep,head))
 
         return dep_relations
+
 
     def compare(self,chatResponse,UDresponse):
       
@@ -69,14 +162,14 @@ class llm_UD:
 
       for index_pair,chatRelation in enumerate(chatResponse):
 
-          chatR_dh  = '%s<#>%s' % (chatRelation[1].lower(),chatRelation[0].lower())
-          chatR_hd  = '%s<#>%s' % (chatRelation[0].lower(),chatRelation[1].lower())
+          chatR_dh  = '%s<#>%s' % (chatRelation[0].lower(),chatRelation[1].lower())
+          chatR_hd  = '%s<#>%s' % (chatRelation[1].lower(),chatRelation[0].lower())
           
 
 
           if chatR_dh in relations_pairs_buffer:
             index_relation = relations_pairs.index(chatR_dh)
-
+            #print('DH',chatR_dh,'in',relations_pairs_buffer)
             self.matchs_UDA[UDresponse[index_relation]['DEPREL']] += 1
             self.matchs_DDA[UDresponse[index_relation]['DEPREL']] += 1
             DDA[0] += 1
@@ -84,20 +177,20 @@ class llm_UD:
             relations_pairs_buffer.remove(chatR_dh) #To avoid compare to the same relation
 
           elif chatR_hd in relations_pairs_buffer:
+            #print('HD',chatR_hd,'in',relations_pairs_buffer)
             index_relation = relations_pairs.index(chatR_hd)
 
             self.matchs_UDA[UDresponse[index_relation]['DEPREL']] += 1
             UDA[0] += 1
-
             relations_pairs_buffer.remove(chatR_hd) #To avoid compare to the same relation
-      
+      #print('COMPARADO=>',chatResponse)
+      #print('COM=======>',[('%s<#>%s') % (r['DEP'].lower(),r['HEAD'].lower()) for r in UDresponse])
+      #print('RESULTANDO>',UDA,DDA)
       return UDA, DDA
 
     def computeResults(self,writerR):
 
-          # del self.syntatic_relations_testset['root']
-          # del self.matchs_UDA['root']
-          # del self.matchs_DDA['root']              	  
+          	  
           writerR.write('UDA %.3f\n' % (sum(self.matchs_UDA.values())/sum(self.syntatic_relations_testset.values())))
           writerR.write('DDA %.3f\n' % (sum(self.matchs_DDA.values())/sum(self.syntatic_relations_testset.values())))
 
@@ -107,59 +200,73 @@ class llm_UD:
 
 
 
-    def testOneShot(self):
-      guide = """Na frase "Todos os adversários de Tótó foram eliminados ." as relações de dependência <token dependente, token cabeça>
-      são as seguintes
-      <todos, adversários>
-      <os, adversários>
-      <adversários, eliminados>
-      <de, totó>
-      <totó, adversários>
-      <foram, eliminados>"""
+    def testGPT(self,fixed=False,shot=0,requests=100):
 
       PATH = '/'.join(os.getcwd().split('/')[0:-1])
       if 'results' not in os.listdir(PATH):
           os.mkdir('%s/results' % PATH)
 
-      save_PATH = '%s/results/one_shot_results.txt' % (PATH)
-      save_PATH_error = '%s/results/error.txt' % (PATH)
+      save_PATH = '%s/results/results_%s_%s_%s.txt' % (PATH,shot,str(fixed),time.asctime())
+      save_PATH_output = '%s/results/output_%s_%s_%s.txt' % (PATH,shot,str(fixed),time.asctime())
+
+      
 
       writerR = open(save_PATH,'w')
-      writerE = open(save_PATH_error,'w')
+      writerOUT = open(save_PATH_output,'w')
       out_pattern = 0
       for index,sample in enumerate(self.test):
         
         depRel = sample[0]
         sentence = sample[1]
         
+        if index % 10 == 0:
+          print('%.3f %% concluded ' % ((index/100)*100))
+          print('%.3f %% out of pattern' % ((out_pattern/100)*100))
+          print(index)
 
+        if index == requests:
+          break
 
-        message = """%s\nAgora liste as relações de dependência na frase 
-                       "%s" 
-                       em pares usando <token dependente, token cabeça>""" % (guide,sentence)
+        message = ''
+
+        if shot == 1:
+          if fixed:
+            message += self.generateGuide(1)
+          else:
+            message += self.generateGuide()
+
+        if shot == 2:
+          if fixed:
+            message += '\n'+self.generateGuide(2)
+          else:
+            message += '\n'+self.generateGuide()
+        message += """.\nListe as relações de dependência sintática na frase "%s", usando o formato (token dependente -> token cabeça)""" % (sentence)
 
         try:
-          llm = self.getDepRelationsChat(self.process_chatgpt_message(message))
+          writerOUT.write(sentence+'\n')
+          writerOUT.write('MESSAGE|:|'+message+'\n')
+          replyGPT = self.process_chatgpt_message(message)
+          writerOUT.write('REPLY|:|'+replyGPT+'\n')
+          llm = self.getDepRelationsChat(replyGPT,writerOUT)
           r = self.compare(llm,depRel)
           sentence_chat = '<#>'.join(['%s<@>%s' % (r[0],r[1]) for r in llm])
           sentence_dep  = '<#>'.join(['%s<@>%s<@>%s' % (d['DEP'],d['HEAD'],d['DEPREL']) for d in depRel])
           writerR.write('chatGPT|:|%s|:|UDA:%.3f<#>DDA: %.3f\n' % (sentence_chat,r[0][0]/r[0][1],r[1][0]/r[1][1]))
           writerR.write('DepRel |:|%s\n' % sentence_dep)
           writerR.write('>--<\n')
+
+          writerOUT.write('chatGPT|:|%s|:|UDA:%.3f<#>DDA: %.3f\n' % (sentence_chat,r[0][0]/r[0][1],r[1][0]/r[1][1]))
+          writerOUT.write('GoldTree |:|%s\n' % sentence_dep)
+          writerOUT.write('>--<\n')
         except:
-          writerE.write('ERROR-chatGPT:[[%s]]\n' % message)
-          writerE.write('ERROR-DepRel % s\n' % str([(d['DEP'],d['HEAD'],d['DEPREL']) for d in depRel]))
-          writerR.write('>--<\n')
+          writerOUT.write('---------------ERROR--------------\n')
           out_pattern += 1
-          continue
 
-        if index % 10 == 0:
-          print('%.3f %% concluded ' % ((index/100)*100))
-          print('%.3f %% out of pattern' % ((out_pattern/100)*100))
+         
 
-        if index == 100:
-          break
+        
       self.computeResults(writerR)
+      return save_PATH
         
 def formatTime(time_):
 
@@ -171,15 +278,44 @@ def formatTime(time_):
 
   print('%02d:%02d:%02d,%s' % (hours,minutes,seconds,miliseconds))
 
+def summarize_results(file_results):
+    relations = []
+
+    for message in open(file_results).read().split('>--<')[0:-1]:
+
+      if len(message.split('\n')) == 4:
+        
+        chat = message.split('\n')[1].split('|:|')[1]
+        dep  = message.split('\n')[2].split('|:|')[1]
+        
+        relations.append((dep,chat))
+    
+   
+    compare(relations.copy(),10)
+    compare(relations.copy(),40)
+    compare(relations.copy(),100)
+
 if "__main__":
     parser = argparse.ArgumentParser(description='UDmodel')
     parser.add_argument('--PATHtest',type=str,default=0,help='CONLLU test file')
-    parser.add_argument('--PATHtrain',type=str,default=0,help='CONLLU train file')
     parser.add_argument('--openkey',type=str,default='',help='openkey from openAI API')
+    parser.add_argument('--PATHtrain',type=str,default='',help='used to generate one and two shot guide')
+    parser.add_argument('--shot',type=int,default=0,help='0 - Zero shot, 1 = one Shot, 2 = Two Shot')
+    parser.add_argument('--fixed',type=int,default=0,help="""0 - False, 1 = True. For shot 1, is used the first sentence 
+                                          from the train file.\n For shot 2, are used the first two sentences in the train file.""")
+    parser.add_argument('--requests',type=int,default=100,help='Total of requests')
     args = parser.parse_args()
-    model = llm_UD(args)
+    
     start = time.time()
-    model.testOneShot()
-    end = time.time()-start
-    formatTime(end)
+
+
+    if args.shot != 0 and args.PATHtrain == '':
+      print('For one or two shot you must define the PATHtrain')
+
+    else:
+      model = llm_UD(args)
+      results = model.testGPT(args.fixed,args.shot,args.requests)
+      summarize_results(results)
+      # end = time.time()-start
+      # formatTime(end)
 
